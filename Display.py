@@ -1,5 +1,7 @@
 import epaper
 import math
+import pyb
+from usched import Poller
 
 # Block co-ordinates
 capacity_batY = [121, 132, 151, 162]
@@ -9,11 +11,15 @@ text_batx = [155, 225]
 text_baty = [28, 53, 78]
 
 
-#num_width = [11, 8, 11, 11, 11, 11, 11, 11, 11, 11]
-
 class BatteryDisplay:
-    def __init__(self, side='L'):
+    def __init__(self, side='L', bat1=None, bat2=None):
         self.disp = epaper.Display(side)
+        self.bat1 = bat1
+        self.bat2 = bat2
+        self.dV1 = 0
+        self.dA1 = 0
+        self.dV2 = 0
+        self.dA2 = 0
 
     # Draws standard background for monitor
     def background(self):
@@ -69,7 +75,6 @@ class BatteryDisplay:
         self.disp.rect(32, 149, 254, 174)
     
     def draw_capacity(self, current_capacity, test=False):
-    
         if test is True:
             for x in range(0, 20):
                 self.disp.fillrect(capacity_batX[x], capacity_batY[0], capacity_batX[x+1]-1, capacity_batY[0]+10)
@@ -82,41 +87,28 @@ class BatteryDisplay:
                 if lne > 0:
                     sects = lne // 5
                     for x in range(0, sects):
-                        self.disp.fillrect(capacity_batX[x], capacity_batY[y], capacity_batX[x+1]-1, capacity_batY[y]+10)
-
+                        self.disp.fillrect(capacity_batX[x], capacity_batY[y],
+                                           capacity_batX[x+1]-1, capacity_batY[y]+10)
                 else:
                     with self.disp.font('/sd/ab8'):
-                        self.disp.locate(50,capacity_batY[y] )
+                        self.disp.locate(50, capacity_batY[y])
                         self.disp.puts("- - - - CHARGING - - - -")
-
                 y += 1
 
-    # def text(self):
-    #     with self.disp.font('/sd/arial21x21'):
-    #         self.disp.locate(125, 28)
-    #         self.disp.puts("72.56")
-    #
-    # def test(self,num):
-    #     with self.disp.font('/sd/arial21x21'):
-    #         self.disp.locate(125+2*num_width[0]+4,53)
-    #         self.disp.puts("00")
-    #         self.disp.locate(125,53)
-    #         self.disp.puts("00")
-    #         self.disp.locate(125+2*num_width[0],53)
-
-    # def voltage(self, v1, v2):
-    #     self.print_number(v1, 155, 28)
-    #     self.print_number(v2, 155, 40, positive_sign=True)
-
-    def update(self, bat1, bat2):
+    def update(self):
         self.background()
-        self.print_number(bat1.V, text_batx[0], text_baty[0])
-        self.print_number(bat1.A, text_batx[0], text_baty[1], positive_sign=True)
-        self.print_number(bat1.AHbalance, text_batx[0], text_baty[2], positive_sign=True)
-        self.print_number(bat2.V, text_batx[1], text_baty[0])
-        self.print_number(bat2.A, text_batx[1], text_baty[1], positive_sign=True)
-        self.print_number(bat2.AHbalance, text_batx[1], text_baty[2], positive_sign=True)
-        self.draw_capacity([bat1.Vcapacity, bat1.AHcapacity, bat2.Vcapacity, bat2.AHcapacity])
+        self.print_number(self.bat1.V, text_batx[0], text_baty[0])
+        self.print_number(self.bat1.A, text_batx[0], text_baty[1], positive_sign=True)
+        self.print_number(self.bat1.AHbalance, text_batx[0], text_baty[2], positive_sign=True)
+        self.print_number(self.bat2.V, text_batx[1], text_baty[0])
+        self.print_number(self.bat2.A, text_batx[1], text_baty[1], positive_sign=True)
+        self.print_number(self.bat2.AHbalance, text_batx[1], text_baty[2], positive_sign=True)
+        self.draw_capacity([self.bat1.Vcapacity, self.bat1.AHcapacity, self.bat2.Vcapacity, self.bat2.AHcapacity])
+        self.dV1 = self.bat1.V
+        self.dA1 = self.bat1.A
+        self.dV2 = self.bat2.V
+        self.dA2 = self.bat2.A
+        self.disp.show()
 
     def print_number(self, value, x, y, positive_sign=False):
         negative_sign = False
@@ -147,11 +139,23 @@ class BatteryDisplay:
                 self.disp.locate(x - wdth - 7, y)
                 self.disp.puts("-")
 
-a = BatteryDisplay()
+    def Poll(self):
+        if (abs(self.dV1-self.bat1.V) > 0.2 or abs(self.dV2-self.bat2.V) > 0.2 or
+                    abs(self.dA1-self.bat1.A) > 0.2 or abs(self.dA2-self.bat2.A) > 0.2):
+            return 1
+        return None
 
-a.background()
-b = 75
-c = 80
-a.draw_capacity([b, c, 90, 95])
-a.voltage(-12.5666, 12.3444)
-a.disp.show()
+def displayThread(bat1, bat2):
+    disp = BatteryDisplay(bat1=bat1, bat2=bat2)
+    wf = Poller(disp.Poll, 30)
+    start = pyb.millis()
+    while True:
+        reason = (yield wf())
+        if reason[1] and pyb.elapsed_millis(start) > 10000:
+            start = pyb.millis()
+            disp.update()
+        else:
+            start = pyb.millis()
+            disp.update()
+
+
