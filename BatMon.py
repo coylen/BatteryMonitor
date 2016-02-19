@@ -7,22 +7,26 @@ import pyb
 # from ADS1115 import ADS1115
 from Battery import Battery, BatteryThread, BatteryCurrentADC
 from Display import displayThread
+from BatCMD import CMDThread
 
 def run():
     # initialise ADC for current measurements
     currentADC = BatteryCurrentADC()
-
     # initialise batteries
     battery1 = Battery(pyb.Pin.Y12, currentADC, AfuncArg='chan 0_1', initialcharge=100, batteryAH=100)
     BT1=BatteryThread(battery1)
+    battery2 = battery1 #temporary for testing
+    # initialise display
+    disp = displayThread(battery1, battery2)
+    # initialise fram
 
-    #initialise display
-    disp = displayThread(battery1, battery1)
-
+    # initialse CMD
+    cmd = CMDThread(battery1, battery2)
     # Setup scheduler
     objSched = Sched()
     objSched.add_thread(BT1)
     objSched.add_thread(disp)
+    objSched.add_thread(cmd)
     objSched.run()
 
 
