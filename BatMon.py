@@ -9,13 +9,14 @@ from Battery import Battery, BatteryThread, BatteryCurrentADC
 from Display import displayThread
 from BatCMD import CMDThread
 
+
 def run():
     # initialise ADC for current measurements
     currentADC = BatteryCurrentADC()
     # initialise batteries
-    battery1 = Battery(pyb.Pin.Y12, currentADC, AfuncArg='chan 0_1', initialcharge=100, batteryAH=100)
-    BT1=BatteryThread(battery1)
-    battery2 = battery1 #temporary for testing
+    battery1 = Battery(pyb.Pin.board.Y12, currentADC, AfuncArg='chan 0_1', initialcharge=100, batteryAH=100)
+    BT1 = BatteryThread(battery1)
+    battery2 = battery1  # temporary for testing
     # initialise display
     disp = displayThread(battery1, battery2)
     # initialise fram

@@ -145,6 +145,7 @@ class BatteryDisplay:
             return 1
         return None
 
+
 def displayThread(bat1, bat2):
     disp = BatteryDisplay(bat1=bat1, bat2=bat2)
     wf = Poller(disp.Poll, 30)
@@ -157,5 +158,3 @@ def displayThread(bat1, bat2):
         else:
             start = pyb.millis()
             disp.update()
-
-
