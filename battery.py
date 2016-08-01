@@ -1,5 +1,4 @@
 import pyb
-from usched import Timeout
 from ADS1115 import ADS1115
 
 class Battery:
@@ -30,7 +29,7 @@ class Battery:
 
     def current(self):
         # Read current
-        a = self.Afunc(self.AfuncArg)
+        a = self.Afunc.read(self.AfuncArg)
         self.A = a
 
         self.AH += self.A * pyb.elapsed_millis(self.start)/3600000
@@ -48,7 +47,7 @@ class Battery:
 
     def capacityfromvoltage(self):
         x = 0
-        while self.V <= self.BatteryVoltCurve[x][1]:
+        while self.V <= self.BatteryVoltCurve[x][1] and x < len(self.BatteryVoltCurve) - 1:
             x += 1
 
         a = (self.V - self.BatteryVoltCurve[x][1]) / (self.BatteryVoltCurve[x-1][1] - self.BatteryVoltCurve[x][1])
@@ -68,7 +67,7 @@ class BatteryCurrentADC:
         self.adc = ADS1115()
         self.pgx =1
 
-    def battery(self, mux):
+    def read(self, mux):
         self.adc.setConfig(acqmode='single', pga=self.pga[self.pgx], mux=mux)
         valid_reading = False
         res=0
@@ -88,11 +87,11 @@ class BatteryCurrentADC:
                 self.pgx += 1
                 self.adc.setPGA(self.pga[self.pgx])
                 valid_reading = False
-        return res
+        return res/625*50
 
 def BatteryThread(BatteryObject):
     bat = BatteryObject
-    wf = Timeout(1)
+    wf = yield 1
     while True:
         bat.update()
         yield wf()

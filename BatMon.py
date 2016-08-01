@@ -14,7 +14,7 @@ def run():
     # initialise ADC for current measurements
     currentADC = BatteryCurrentADC()
     # initialise batteries
-    battery1 = Battery(pyb.Pin.board.Y12, currentADC, AfuncArg='chan 0_1', initialcharge=100, batteryAH=100)
+    battery1 = Battery(pyb.Pin.board.Y12, currentADC.read, AfuncArg='chan 0_1', initialcharge=100, batteryAH=100)
     BT1 = BatteryThread(battery1)
     battery2 = battery1  # temporary for testing
     # initialise display
