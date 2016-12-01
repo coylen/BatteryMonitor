@@ -1,4 +1,6 @@
 import math
+import time
+from epdpart import EPDException
 # Block co-ordinates
 capacity_batY = [121, 132, 151, 162]
 capacity_batX = [34, 45, 56, 67, 78, 89, 100, 111, 122, 133, 144,
@@ -22,7 +24,7 @@ class draw:
     def __init__(self, disp):
         self.display = disp
 # Draws standard background for monitor
-    def background(self):
+    def background(self,time):
         self.display.clear_screen(False)
         self.display.line(0, 25, 263, 25)
         self.display.line(0, 50, 263, 50)
@@ -57,6 +59,8 @@ class draw:
             self.display.puts("V")
             self.display.locate(14, 161)
             self.display.puts("AH")
+            self.display.locate(0,0)
+            self.display.puts(str(time[4]))
 
         # top marks
         self.display.line(88, 116, 88, 119, width=3)
@@ -75,6 +79,7 @@ class draw:
         self.display.rect(32, 149, 254, 174)
 
     def draw_capacity(self, current_capacity, test=False):
+      #  print(current_capacity)
         if test is True:
             for x in range(0, 20):
                 self.display.fillrect(capacity_batX[x], capacity_batY[0], capacity_batX[x+1]-1, capacity_batY[0]+10)
@@ -96,24 +101,29 @@ class draw:
                 y += 1
 
     def update(self, bat1, bat2):
-        self.background()
-        self.print_number(bat1.V, text_batx[0], text_baty[0])
-        self.print_number(bat1.A, text_batx[0], text_baty[1], positive_sign=True)
-        self.print_number(bat1.AHbalance, text_batx[0], text_baty[2], positive_sign=True)
-        self.print_number(bat2.V, text_batx[1], text_baty[0])
-        self.print_number(bat2.A, text_batx[1], text_baty[1], positive_sign=True)
-        self.print_number(bat2.AHbalance, text_batx[1], text_baty[2], positive_sign=True)
-        self.draw_capacity([bat1.Vcapacity, bat1.AHcapacity, bat2.Vcapacity, bat2.AHcapacity])
-        self.display.refresh()
+        try:
+            with self.display:
+                self.background(time.localtime(time.time()))
+                self.print_number(bat1.V, text_batx[0], text_baty[0])
+                self.print_number(bat1.A, text_batx[0], text_baty[1], positive_sign=True)
+                self.print_number(bat1.AH_day, text_batx[0], text_baty[2], positive_sign=True)
+                self.print_number(bat2.V, text_batx[1], text_baty[0])
+                self.print_number(bat2.A, text_batx[1], text_baty[1], positive_sign=True)
+                self.print_number(bat2.AH_day, text_batx[1], text_baty[2], positive_sign=True)
+                self.draw_capacity([bat1.capacityV, bat1.capacityAH, bat2.capacityV, bat2.capacityAH])
+                #self.display.refresh()
+                self.display.exchange(True)
+        except EPDException:
+            print('Epaper error one off or continues?')
 
     def print_number(self, value, x, y, positive_sign=False):
         negative_sign = False
         value_fraction, value_integer = math.modf(value)
-        value_fraction = int(abs(value_fraction) * 100)
-        value_integer = int(value_integer)
-        if value_integer < 0:
+        if value_fraction < 0:
             negative_sign = True
-            value_integer = abs(value_integer)
+            positive_sign = False
+        value_integer = abs(int(value_integer))
+        value_fraction = int(abs(value_fraction) * 100)
         if value_integer // 10 == 1:
             wdth = 18
         elif value_integer // 10 > 1:
@@ -123,7 +133,10 @@ class draw:
 
         with self.display.font('/sd/arial21x21'):
             self.display.locate(x - wdth, y)
-            self.display.puts(str(value_integer) + "." + str(value_fraction))
+            vf = str(value_fraction)
+            if len(vf) == 1:
+                vf = '0' + vf
+            self.display.puts(str(value_integer) + "." + vf)
 
         if positive_sign:
             with self.display.font('/sd/arial21x21'):

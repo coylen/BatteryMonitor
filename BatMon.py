@@ -25,10 +25,16 @@ class Monitor:
         #Create battery ADC interface
         currentADC = BatteryCurrentADC()
         # Initialise batteries can be test or normal
-        self.battery1 = testBattery(pyb.Pin.board.X11, currentADC, AfuncArg='chan 0_1',
-                                    initialcharge=100, batteryAH=100)
-        self.battery2 = testBattery(pyb.Pin.board.X12, currentADC, AfuncArg='chan 2_3',
-                                    initialcharge=100, batteryAH=100)
+        #self.battery1 = testBattery(pyb.Pin.board.X11, currentADC, AfuncArg='chan 0_1',
+        #                            initialcharge=100, batteryAH=100)
+        #self.battery2 = testBattery(pyb.Pin.board.X12, currentADC, AfuncArg='chan 2_3',
+        #                            initialcharge=100, batteryAH=100)
+
+        self.battery1 = Battery(pyb.Pin.board.X12, currentADC, AfuncArg='chan 0_1',
+                                initialcharge = 65, batteryAH = 100)
+
+        self.battery2 =self.battery1
+
         # TODO: initialise CMD
 
         # initialse logger and file things up

@@ -18,121 +18,93 @@ _SOCParameters = ((12.2434210526, 0.0344855436963, -0.000264929149807, -3.040015
 class Battery:
 
     def __init__(self, Vpin, Afunc, AfuncArg='chan 0_1', initialcharge=100, batteryAH=110):
-        self.initialcharge = initialcharge
-        self.AHCapacity = batteryAH
-        # Setup PINS
+
+        # Setup PINS and functions
         self.voltage_adc = pyb.ADC(Vpin)
         self.Afunc = Afunc
         self.AfuncArg = AfuncArg
+
+        # create and set variables
+        self.Battery_AH_Capacity = batteryAH
+        self.AH = batteryAH * initialcharge / 100
         self.V = 0
         self.A = 0
-        self.AH = 0
         self.AH_15 = 0
         self.AH_60 = 0
+        self.AH_day = 0
         self.capacityV = 0
         self.capacityAH = 0
+
         # start timer
         self.timer = pyb.millis()
         self.last_write = time.time()
-        self.log_message= ''
+        self.log_message = ''
         self.write_flag = False
-        self.AH_day = 0
         self.update()
 
+    # Read Voltage from voltage pin and convert to account for divider
     def voltage(self):
-        # Read Voltage
-        v = self.voltage_adc.read() / 4095 * 18.3
+        v = self.voltage_adc.read() / 4096 * 18.3
         self.V = v
 
+    # Read current using ADS1115
+    # TODO: Check orientation of flow may need to adjust
     def current(self):
-        # Read current
         a = self.Afunc.read(self.AfuncArg)
-        self.A = a
+        self.A = -a
         AHtemp = self.A * pyb.elapsed_millis(self.timer) / 3600000
         self.AH += AHtemp
+        # set current AH value and adjust if beyond limits
+        if self.AH < 0:
+            self.AH = 0
+        elif self.AH > self.Battery_AH_Capacity:
+            self.AH = self.Battery_AH_Capacity
+        # TODO: is a 24 hour more useful or 60 min running?
         self.AH_15 += AHtemp
         self.AH_60 += AHtemp
-        self.AH_day +=AHtemp
+        self.AH_day += AHtemp
         self.timer = pyb.millis()
 
+    # function to calculate current % of capacity
+    # Calculated on basis of current voltage
+    # calculated based on summation of current in/out
     def capacity(self):
         self.capacityV = self.SOCfromV()
-        self.capacityAH = round((self.initialcharge + (self.AH / self.AHCapacity)*100)/5)*5
+        self.capacityAH = round(((self.AH / self.Battery_AH_Capacity) * 100) / 5) * 5
         if self.capacityAH > 100:
             self.capacityAH = 100
         if self.capacityAH < 0:
             self.capacityAH = 0
 
+    # Function to update battery data
     def update(self):
         self.voltage()
         self.current()
         self.capacity()
- #       self.logging()
 
+    # Function to generate log message to be written by main loop
     def log(self, current_time):
         current_time_tuple = time.localtime(current_time)
         # TODO need to choose format V, A, AH15, AH60, AHday, capacityAH, capacityV
-        self.log_message = "{0}-{1}-{2},{3}:{4},{5},{6},{7},{8}\r\n".format(current_time_tuple[2], current_time_tuple[1],
-                                                                        current_time_tuple[0], current_time_tuple[3],
-                                                                        current_time_tuple[4], self.V, self.AH_15,
-                                                                        self.AH_60, self.AH_day)
+        self.log_message = "{0}-{1}-{2},{3}:{4},{5},{6},{7},{8},{9},{10},{11}\r\n".format(current_time_tuple[2],
+                                                                                          current_time_tuple[1],
+                                                                                          current_time_tuple[0],
+                                                                                          current_time_tuple[3],
+                                                                                          current_time_tuple[4],
+                                                                                          self.V, self.AH_15, self.AH_60,
+                                                                                          self.AH_day, self.AH,
+                                                                                          self.capacityV, self.capacityAH)
+        # log written every 15 minutes so log reset
         self.AH_15 = 0
+        # check for hour and if so reset AH60
         if current_time_tuple[4] == 0:
-            self._AH60 = 0
+            self.AH_60 = 0
+            # check for midnight and if so reset AH_day
+            if current_time_tuple[3] == 0:
+                self.AH_day = 0
         return self.log_message
 
-    def new_day(self):
-        self.AH_day = 0
-
-    # def logging(self):
-    #     current_time = time.time()
-    #     if time.localtime(current_time)[4] % 15 == 0 and time.localtime(current_time - self.last_write)[4] > 5:
-    #         current_time_tuple = time.localtime(current_time)
-    #         # TODO need to choose format V, A, AH15, AH60, AHday, capacityAH, capacityV
-    #         self.log_message = "{0}-{1}-{2},{3}:{4},{5},{6},{7},{8}".format(current_time_tuple[2], current_time_tuple[1],
-    #                                                                   current_time_tuple[0], current_time_tuple[3],
-    #                                                                   current_time_tuple[4], self.V, self.AH_15,
-    #                                                                   self.AH_60, self.AH_day)
-    #         self.AH_15 = 0
-    #         if time.localtime(current_time)[5] == 0:
-    #             self._AH60 = 0
-    #         self.write_flag = True
-    #         self.last_write = current_time
-
-
-    def interpolateSOC(self):
-        x = 0
-        while x < 9:
-            try:
-                currentrate = self.AHCapacity / _SOCCurrentFlow[x]
-            except:
-                currentrate = 0
-            if self.A > currentrate:
-                break
-            x += 1
-        if x == 0:
-            return _SOCParameters[0]
-        if x == 9:
-            return _SOCParameters[8]
-        if x == 4:
-            rate1 = self.AHCapacity / _SOCCurrentFlow[x - 1]
-            rate2 = 0
-        elif x == 5:
-            rate1 = 0
-            rate2 = self.AHCapacity / _SOCCurrentFlow[x]
-        else:
-            rate1 = self.AHCapacity / _SOCCurrentFlow[x - 1]
-            rate2 = self.AHCapacity / _SOCCurrentFlow[x]
-
-        factor = (self.A - rate1) / (rate2 - rate1)
-        params1 = _SOCParameters[x - 1]
-        params2 = _SOCParameters[x]
-        interpolatedparams = []
-        for x in range(6):
-            y = (params2[x] - params1[x]) * factor + params1[x]
-            interpolatedparams.append(y)
-        return interpolatedparams
-
+    # Function to estimate capacity based on current voltage
     def SOCfromV(self):
         params = self.interpolateSOC()
         # check extreme cases
@@ -158,10 +130,50 @@ class Battery:
             a /= 2
         return round(SOCestimate / 5) * 5
 
+    # Function interpolates between range of curves for voltage vs % capacity
+    # curves vary for current flow rate
+    def interpolateSOC(self):
+        x = 0
+        while x < 9:
+            try:
+                currentrate = self.Battery_AH_Capacity / _SOCCurrentFlow[x]
+            except:
+                currentrate = 0
+            if self.A > currentrate:
+                break
+            x += 1
+        if x == 0:
+            return _SOCParameters[0]
+        if x == 9:
+            return _SOCParameters[8]
+        if x == 4:
+            rate1 = self.Battery_AH_Capacity / _SOCCurrentFlow[x - 1]
+            rate2 = 0
+        elif x == 5:
+            rate1 = 0
+            rate2 = self.Battery_AH_Capacity / _SOCCurrentFlow[x]
+        else:
+            rate1 = self.Battery_AH_Capacity / _SOCCurrentFlow[x - 1]
+            rate2 = self.Battery_AH_Capacity / _SOCCurrentFlow[x]
+
+        factor = (self.A - rate1) / (rate2 - rate1)
+        params1 = _SOCParameters[x - 1]
+        params2 = _SOCParameters[x]
+        interpolatedparams = []
+        for x in range(6):
+            y = (params2[x] - params1[x]) * factor + params1[x]
+            interpolatedparams.append(y)
+        return interpolatedparams
+
+    def calA(self):
+        a = self.Afunc.cal(self.AfuncArg)
+        print(a)
 
 _pga = (6144, 4096, 2048, 1024, 512, 256)
 
 
+# Class to interface current flow meters and ADS1115 ADC
+# Class is shared between both batterys so is passed into battery constructor
 class BatteryCurrentADC:
 
     def __init__(self):
@@ -177,35 +189,59 @@ class BatteryCurrentADC:
             # read Voltages
             res = self.adc.readConversion()
             valid_reading = True
-            if res >= _pga[self.pgx]:
-                # overload - reduce sensitivity
-                if self.pgx > 0:
-                    self.pgx -= 1
+            try:
+                if abs(res) >= 0.9*_pga[self.pgx]:
+                    # overload - reduce sensitivity
+                    if self.pgx > 0:
+                        self.pgx -= 1
+                        self.adc.setPGA(_pga[self.pgx])
+                        valid_reading = False
+                if self.pgx < 5 and abs(res) <= _pga[self.pgx + 1]:
+                    # not using full range
+                    self.pgx += 1
                     self.adc.setPGA(_pga[self.pgx])
                     valid_reading = False
-            if self.pgx < 5 and res <= _pga[self.pgx + 1]:
-                # not using full range
-                self.pgx += 1
-                self.adc.setPGA(_pga[self.pgx])
-                valid_reading = False
+            except:
+                return 0
         return res/625*50
 
+    def cal(self,mux):
+        self.adc.setConfig(acqmode='contin', pga=256, mux=mux)
+        self.adc.startADCConversion()
+            # read Voltages
+        res = 0
+        for x in range(100):
+#            self.adc.startADCConversion()
+            a = self.adc.readConversion()
+
+            print(a)
+            res += a
+            time.sleep(0.25)
+
+        return (res/100)/625*50
 
 from urandom import randrange
 
-# simply class to generate random data for display testing
+
+# Simple class to generate random data for display testing
 class testBattery(Battery):
 
     def __init__(self, Vpin, Afunc, AfuncArg='chan 0_1', initialcharge=100, batteryAH=110):
         super().__init__(Vpin, Afunc, AfuncArg='chan 0_1', initialcharge=100, batteryAH=110)
 
+    # Dummy update to generate random data for plotting/logging test
     def update(self):
         self.V = randrange(118, 138)/10
         self.A = randrange(-40, 40)/10
         AHtemp = self.A * pyb.elapsed_millis(self.timer) / 3600000
         self.AH += AHtemp
+        # set current AH value and adjust if beyond limits
+        if self.AH < 0:
+            self.AH = 0
+        elif self.AH > self.Battery_AH_Capacity:
+            self.AH = self.Battery_AH_Capacity
         self.AH_15 += AHtemp
         self.AH_60 += AHtemp
-        self.AH_day +=AHtemp
+        self.AH_day += AHtemp
         self.timer = pyb.millis()
         self.capacity()
