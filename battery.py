@@ -17,7 +17,7 @@ _SOCParameters = ((12.2434210526, 0.0344855436963, -0.000264929149807, -3.040015
 
 class Battery:
 
-    def __init__(self, Vpin, Afunc, AfuncArg='chan 0_1', initialcharge=100, batteryAH=110):
+    def __init__(self, Vpin, Afunc, AfuncArg='chan 0_1', initialcharge=100, batteryAH=110, Aoffset=0):
 
         # Setup PINS and functions
         self.voltage_adc = pyb.ADC(Vpin)
@@ -34,6 +34,7 @@ class Battery:
         self.AH_day = 0
         self.capacityV = 0
         self.capacityAH = 0
+        self.Aoffset = Aoffset
 
         # start timer
         self.timer = pyb.millis()
@@ -51,7 +52,7 @@ class Battery:
     # TODO: Check orientation of flow may need to adjust
     def current(self):
         a = self.Afunc.read(self.AfuncArg)
-        self.A = -a
+        self.A = -a + self.Aoffset
         AHtemp = self.A * pyb.elapsed_millis(self.timer) / 3600000
         self.AH += AHtemp
         # set current AH value and adjust if beyond limits
@@ -166,8 +167,8 @@ class Battery:
         return interpolatedparams
 
     def calA(self):
-        a = self.Afunc.cal(self.AfuncArg)
-        print(a)
+        self.Aoffset = self.Afunc.cal(self.AfuncArg)
+        print(self.Aoffset)
 
 _pga = (6144, 4096, 2048, 1024, 512, 256)
 
@@ -216,7 +217,7 @@ class BatteryCurrentADC:
 
             print(a)
             res += a
-            time.sleep(0.25)
+            time.sleep(1)
 
         return (res/100)/625*50
 

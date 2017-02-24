@@ -8,7 +8,7 @@ import epaper
 from time import time, localtime
 from Battery import Battery, BatteryCurrentADC, testBattery
 from Display import draw
-# from BatCMD import CMDThread
+from BatCMD import BatCMD
 from fram import FRAM, cp
 from os import listdir, remove, sync
 
@@ -29,18 +29,26 @@ class Monitor:
         #                            initialcharge=100, batteryAH=100)
         #self.battery2 = testBattery(pyb.Pin.board.X12, currentADC, AfuncArg='chan 2_3',
         #                            initialcharge=100, batteryAH=100)
+        self.mount_fram()
+        try:
+            Aoff1, Aoff2 = self.config()
+        except:
+            Aoff1 = 0
+            Aoff2 = 0
+            print('no config')
 
         self.battery1 = Battery(pyb.Pin.board.X12, currentADC, AfuncArg='chan 0_1',
-                                initialcharge = 65, batteryAH = 100)
+                                initialcharge = 65, batteryAH = 100, Aoffset=Aoff1)
 
         self.battery2 =self.battery1
 
         # TODO: initialise CMD
+        self.CMD = BatCMD(self.battery1, self.battery2)
 
         # initialse logger and file things up
         self.last_write = 0
         self.update()
-        self.mount_fram()
+
 
     # Main functional loop of the program
     def run(self):
@@ -54,6 +62,7 @@ class Monitor:
                 screen_timer = self.update()
                 self.log_test()
                 gc.collect()
+                self.CMD.Poll()
             # TODO - check for command interface
 
     # Function to update battery data and screen
@@ -101,12 +110,14 @@ class Monitor:
         ld = listdir('/fram')
         if len(ld) > 2:
             for f in ld:
-                fullname = '/fram/' + f
-                if fullname != fn1 and fullname != fn2:
-                    # file not current so move
-                    cp(fullname, '/sd/logs/')
-                    remove(fullname)
-                    sync()
+                #ignore config file
+                if f !='config':
+                    fullname = '/fram/' + f
+                    if fullname != fn1 and fullname != fn2:
+                        # file not current so move
+                        cp(fullname, '/sd/logs/')
+                        remove(fullname)
+                        sync()
 
     # Static function to mount fram drive at startup
     @staticmethod
@@ -118,3 +129,16 @@ class Monitor:
         except:
             pass
         pyb.mount(f, '/fram')
+
+    # Function to setup Fram and read config file values for calibration
+    def config(self):
+        with open('/fram/config', 'r') as f:
+            Aoff1 = f.readline()
+            Aoff2 = f.readline()
+        return float(Aoff1), float(Aoff2)
+
+    def write_config(self, Aoff1, Aoff2):
+        with open('/fram/config', 'w') as f:
+            f.write("{0}\r\n".format(Aoff1))
+            f.write("{0}\r\n".format(Aoff2))
+        sync()

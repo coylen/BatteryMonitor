@@ -88,7 +88,7 @@ class BatCMD:
 
     # commands
     def batterycommands(self, data):
-        batcommands = {'cap': self.setbatterycapacity, 'current': self.setbatterychargelevel}
+        batcommands = {'cap': self.setbatterycapacity, 'current': self.setbatterychargelevel, 'cal':self.batterycurrentcal}
         # checkformat
         self.debug(data)
         pass
@@ -107,6 +107,10 @@ class BatCMD:
         pass
 
     def setbatterychargelevel(self, bat, data):
+        self.debug(data)
+        pass
+
+    def batterycurrentcal(self, bat, data):
         self.debug(data)
         pass
 
